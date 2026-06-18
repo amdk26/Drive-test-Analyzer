@@ -2,20 +2,35 @@ import csv
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox,
-    QLineEdit, QComboBox, QAbstractItemView, QApplication
+    QLineEdit, QComboBox, QAbstractItemView, QApplication, QListView
 )
 from PyQt6.QtCore import Qt, QMimeData
 from PyQt6.QtGui import QColor, QFont, QBrush, QStandardItemModel, QStandardItem
 
+# ==========================================
+# KELAS KUSTOM: COMBOBOX CHECKBOX ANTI-BUG
+# ==========================================
 class CheckableComboBox(QComboBox):
     def __init__(self):
         super().__init__()
+        # Menggunakan QListView agar item bisa diklik tanpa langsung menutup dropdown
+        self.setView(QListView(self))
+        self.view().pressed.connect(self.handle_item_pressed)
         self.setModel(QStandardItemModel(self))
-        self.lineEdit = QLineEdit()
-        self.lineEdit.setReadOnly(True)
-        self.setLineEdit(self.lineEdit)
-        self.lineEdit.setText("Pilih SSID untuk di-apply...")
+        
+        self.lineEdit_custom = QLineEdit()
+        self.lineEdit_custom.setReadOnly(True)
+        self.setLineEdit(self.lineEdit_custom)
+        self.lineEdit_custom.setText("✨ Pilih SSID...")
+        
         self.model().dataChanged.connect(self.update_text)
+
+    def handle_item_pressed(self, index):
+        item = self.model().itemFromIndex(index)
+        if item.checkState() == Qt.CheckState.Checked:
+            item.setCheckState(Qt.CheckState.Unchecked)
+        else:
+            item.setCheckState(Qt.CheckState.Checked)
 
     def add_item(self, text, checked=False):
         item = QStandardItem(text)
@@ -33,12 +48,18 @@ class CheckableComboBox(QComboBox):
 
     def update_text(self):
         checked = self.get_checked_items()
-        if not checked: self.lineEdit.setText("Tidak ada SSID yang dipilih")
-        else: self.lineEdit.setText(", ".join(checked))
+        if not checked:
+            self.lineEdit_custom.setText("✨ Pilih SSID...")
+        else:
+            self.lineEdit_custom.setText(", ".join(checked))
 
     def clear_items(self):
         self.model().clear()
 
+
+# ==========================================
+# APLIKASI UTAMA
+# ==========================================
 class RadioEditorWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -62,19 +83,23 @@ class RadioEditorWindow(QMainWindow):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(10)
 
+        # ==========================================
+        # 1. FRAME KONTROL ATAS
+        # ==========================================
         top_frame = QWidget()
         top_frame.setStyleSheet("background-color: #f5f5f5; border-radius: 5px; border: 1px solid #ddd;")
         top_layout = QVBoxLayout(top_frame)
         top_layout.setContentsMargins(10, 10, 10, 10)
 
+        # --- BARIS 1: TOMBOL DENGAN PEMANIS ---
         btn_layout = QHBoxLayout()
-        self.btn_back = QPushButton("🔙 Kembali ke Menu")
+        self.btn_back = QPushButton("🔙 Kembali 🏠")
         self.btn_back.setStyleSheet("background-color: #ffffff; color: #333333; font-weight: bold; font-family: 'Segoe UI'; font-size: 10pt; padding: 6px 12px; border: 1px solid #cccccc; border-radius: 4px;")
         
-        self.btn_upload = QPushButton("📂 Upload CSV")
+        self.btn_upload = QPushButton("📥 Upload CSV Radio 🚀")
         self.btn_upload.setStyleSheet("background-color: #c00000; color: white; font-weight: bold; font-family: 'Segoe UI'; font-size: 10pt; padding: 6px 15px; border-radius: 4px; border: 1px solid #800000;")
 
-        self.btn_copy = QPushButton("📑 Copy Tabel (Word/Excel)")
+        self.btn_copy = QPushButton("📋 Copy Tabel (Word/Excel) ✨")
         self.btn_copy.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; font-family: 'Segoe UI'; font-size: 10pt; padding: 6px 15px; border-radius: 4px; border: 1px solid #1e7e34;")
 
         btn_layout.addWidget(self.btn_back)
@@ -82,6 +107,7 @@ class RadioEditorWindow(QMainWindow):
         btn_layout.addWidget(self.btn_copy)
         btn_layout.addStretch()
         
+        # --- BARIS 2: FILTER & BULK ASSIGN ---
         filter_layout = QHBoxLayout()
         lbl_filter = QLabel("🔍 Cari Data:")
         lbl_filter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
@@ -91,19 +117,20 @@ class RadioEditorWindow(QMainWindow):
         self.combo_filter.setStyleSheet("font-family: 'Segoe UI'; font-size: 10pt; padding: 4px; background: white; border: 1px solid #aaa;")
         
         self.txt_filter = QLineEdit()
-        self.txt_filter.setPlaceholderText("Ketik untuk mencari...")
+        self.txt_filter.setPlaceholderText("Ketik nama AP/SSID...")
         self.txt_filter.setStyleSheet("font-family: 'Segoe UI'; font-size: 10pt; padding: 5px; min-width: 200px; border: 1px solid #aaa;")
 
-        lbl_ssid = QLabel("🎯 Set SSID:")
+        lbl_ssid = QLabel("🎯 Set Target SSID ✨:")
         lbl_ssid.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        lbl_ssid.setStyleSheet("color: #c00000;") # Warna teks merah agar menarik
         
         self.combo_ssid_check = CheckableComboBox()
-        self.combo_ssid_check.setStyleSheet("font-family: 'Segoe UI'; font-size: 10pt; padding: 4px; background: white; border: 1px solid #aaa; min-width: 250px;")
+        self.combo_ssid_check.setStyleSheet("font-family: 'Segoe UI'; font-size: 10pt; padding: 4px; background: white; border: 1px solid #c00000; min-width: 250px; color: #333;")
         
-        self.combo_ssid_check.add_item("Telin-Guest", False)
-        self.combo_ssid_check.add_item("Telin-Corporate", False)
-        self.combo_ssid_check.add_item("Telin-IoT", False)
-        self.combo_ssid_check.add_item("Telin-Test", False)
+        # MEMASUKKAN 4 DUMMY SSID (Default)
+        self.default_ssids = ["BRI-Digital", "Brivolution", "Direksi-BRI"]
+        for s in self.default_ssids:
+            self.combo_ssid_check.add_item(s, False)
 
         filter_layout.addWidget(lbl_filter)
         filter_layout.addWidget(self.combo_filter)
@@ -117,6 +144,9 @@ class RadioEditorWindow(QMainWindow):
         top_layout.addLayout(filter_layout)
         main_layout.addWidget(top_frame)
 
+        # ==========================================
+        # 2. TABEL DATA RADIO 
+        # ==========================================
         self.table = QTableWidget()
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -134,14 +164,19 @@ class RadioEditorWindow(QMainWindow):
         
         main_layout.addWidget(self.table)
 
-        self.status_label = QLabel("Siap. Silakan upload file CSV Radio Info.")
+        self.status_label = QLabel("Siap. Silakan upload file CSV Radio Info. 🚀")
         self.status_label.setStyleSheet("color: #666; font-family: 'Segoe UI'; font-size: 9pt;")
         main_layout.addWidget(self.status_label)
 
+        # ==========================================
+        # 3. EVENT CONNECTIONS
+        # ==========================================
         self.btn_back.clicked.connect(self.back_to_home)
         self.btn_upload.clicked.connect(self.upload_csv)
         self.btn_copy.clicked.connect(self.copy_to_clipboard_html)
         self.txt_filter.textChanged.connect(self.apply_search_filter)
+        
+        # Memicu fungsi Apply SSID ke Tabel saat Checkbox dicentang
         self.combo_ssid_check.model().dataChanged.connect(self.apply_ssid_to_table)
 
     def back_to_home(self):
@@ -168,7 +203,7 @@ class RadioEditorWindow(QMainWindow):
         )
         if not filepath: return
 
-        self.status_label.setText("Sedang memproses dan mengelompokkan data...")
+        self.status_label.setText("Sedang memproses dan mengelompokkan data... ⏳")
         processed_ap = {}
         unique_ssids = set() 
 
@@ -184,6 +219,7 @@ class RadioEditorWindow(QMainWindow):
                     ssid = self.get_val(row, ["ssid"])
 
                     if not ap_name: continue
+                    
                     if ssid and ssid != "-" and ssid != "--":
                         unique_ssids.add(ssid)
 
@@ -202,18 +238,24 @@ class RadioEditorWindow(QMainWindow):
                         if ch_val != "-" or pwr_val != "-":
                             processed_ap[ap_name]["radio_5g"].append({"ch": ch_val, "pwr": pwr_val})
 
+            # PERBAIKAN: Menggabungkan SSID Dummy dengan SSID dari CSV agar tidak hilang
             self.combo_ssid_check.model().dataChanged.disconnect(self.apply_ssid_to_table) 
             self.combo_ssid_check.clear_items()
-            for s in sorted(list(unique_ssids)):
+            
+            # Gabungkan dan urutkan
+            all_combined_ssids = sorted(list(set(self.default_ssids) | unique_ssids))
+            
+            for s in all_combined_ssids:
                 self.combo_ssid_check.add_item(s, False)
+                
             self.combo_ssid_check.model().dataChanged.connect(self.apply_ssid_to_table)
 
             self.populate_table(processed_ap)
-            self.status_label.setText(f"Berhasil memproses data dari: {filepath.split('/')[-1]}")
+            self.status_label.setText(f"✅ Berhasil memproses data dari: {filepath.split('/')[-1]}")
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Gagal membaca CSV:\n{str(e)}")
-            self.status_label.setText("Gagal upload data.")
+            QMessageBox.critical(self, "Error ❌", f"Gagal membaca CSV:\n{str(e)}")
+            self.status_label.setText("❌ Gagal upload data.")
 
     def populate_table(self, grouped_data):
         self.table.setSortingEnabled(False)
@@ -238,6 +280,7 @@ class RadioEditorWindow(QMainWindow):
                 ch_5_str = f"High : {r5_sorted[0]['ch']}\nLow  : {r5_sorted[1]['ch']}"
                 pwr_5_str = f"{r5_sorted[0]['pwr']}\n{r5_sorted[1]['pwr']}"
 
+            # SUSUNAN FIX: SSID ada di Index ke-5 (Paling Kanan)
             row_values = [ap_name, data["ch_24"], data["pwr_24"], ch_5_str, pwr_5_str, data["ssid"]]
             row_color = self.bg_color_even if row_idx % 2 == 0 else self.bg_color_odd
 
@@ -260,47 +303,50 @@ class RadioEditorWindow(QMainWindow):
         self.table.resizeRowsToContents()
         self.table.setUpdatesEnabled(True)
         self.table.setSortingEnabled(True)
+        
+        # Mengecek apakah ada Checkbox yang sedang tercentang untuk diaplikasikan
         self.apply_ssid_to_table()
 
+    # --- FUNGSI MENGISI KOLOM SSID BERDASARKAN CHECKBOX ---
     def apply_ssid_to_table(self):
-        if self.table.rowCount() == 0: return
+        if self.table.rowCount() == 0:
+            return
+            
         checked_ssids = self.combo_ssid_check.get_checked_items()
+        
+        # Menggunakan format baris baru (\n) agar SSID menyusun atas-bawah persis seperti High/Low
         new_ssid_value = "\n".join(checked_ssids) if checked_ssids else "-"
         
         self.table.setUpdatesEnabled(False)
         for row in range(self.table.rowCount()):
-            item = self.table.item(row, 5) 
+            item = self.table.item(row, 5) # Indeks 5 adalah kolom SSID di paling kanan
             if item:
                 item.setText(new_ssid_value)
                 
         self.table.resizeRowsToContents()
         self.table.setUpdatesEnabled(True)
+        
+        # Panggil ulang filter search bar barangkali ada SSID yang baru diaplikasikan
         self.apply_search_filter()
 
+    # --- FUNGSI MENCARI TEKS ---
     def apply_search_filter(self):
         search_text = self.txt_filter.text().lower()
         filter_target = self.combo_filter.currentText()
-        col_index_text = 0 if filter_target == "AP Name" else 5 
-        checked_ssids = self.combo_ssid_check.get_checked_items()
+        col_index = 0 if filter_target == "AP Name" else 5 # AP Name=0, SSID=5
 
         for row in range(self.table.rowCount()):
-            text_match = False
-            ssid_match = False
-            
-            item_text = self.table.item(row, col_index_text)
-            if item_text and search_text in item_text.text().lower(): text_match = True
-                
-            item_ssid = self.table.item(row, 5)
-            # Jika tidak ada yang dicentang atau data cocok dengan filter SSID
-            if item_ssid and (not checked_ssids or any(s in item_ssid.text() for s in checked_ssids) or item_ssid.text() == "-"):
-                ssid_match = True
-                
-            if text_match and ssid_match: self.table.setRowHidden(row, False)
-            else: self.table.setRowHidden(row, True)
+            item = self.table.item(row, col_index)
+            if item:
+                if search_text in item.text().lower(): 
+                    self.table.setRowHidden(row, False)
+                else: 
+                    self.table.setRowHidden(row, True)
 
+    # --- FUNGSI COPY TO HTML EXCEL/WORD ---
     def copy_to_clipboard_html(self):
         if self.table.rowCount() == 0:
-            QMessageBox.warning(self, "Peringatan", "Tidak ada data untuk disalin.")
+            QMessageBox.warning(self, "Peringatan ⚠️", "Tidak ada data untuk disalin.")
             return
 
         html = '<html><head><meta charset="utf-8"></head><body>\n'
@@ -343,4 +389,4 @@ class RadioEditorWindow(QMainWindow):
         mime_data.setText(fallback_text)
 
         QApplication.clipboard().setMimeData(mime_data)
-        QMessageBox.information(self, "Sukses", "Tabel disalin!\n\nSilakan 'Paste' (Ctrl+V) langsung ke Word/Excel dengan format Calibri 11pt.")
+        QMessageBox.information(self, "Sukses ✨", "Tabel berhasil disalin!\n\nSilakan 'Paste' (Ctrl+V) langsung ke Word/Excel dengan format Calibri 11pt.")

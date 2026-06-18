@@ -149,7 +149,14 @@ class DriveTestAppPyQt(QMainWindow):
         inserted_count = 0
         
         self.table.setUpdatesEnabled(False)
-        stats = {"Excellent": 0, "Good": 0, "Fair": 0, "Poor": 0}
+        
+        stats = {
+            "Excellent Signal": 0, 
+            "Very Good Signal": 0, 
+            "Low Signal": 0, 
+            "Very Low Signal": 0, 
+            "No Signal": 0
+        }
 
         for line in lines:
             line = line.strip()
@@ -162,10 +169,12 @@ class DriveTestAppPyQt(QMainWindow):
             try:
                 avg_fs = float(row_data[3])
                 snr = avg_fs - (-90)
-                if snr >= 25: snr_result = "Excellent"
-                elif snr >= 15: snr_result = "Good"
-                elif snr >= 10: snr_result = "Fair"
-                else: snr_result = "Poor"
+                if snr >= 40: snr_result = "Excellent Signal"
+                elif snr >= 25: snr_result = "Very Good Signal"
+                elif snr >= 15: snr_result = "Low Signal"
+                elif snr >= 10: snr_result = "Very Low Signal"
+                else: snr_result = "No Signal"
+                
                 row_data.extend([round(snr, 2), snr_result])
                 stats[snr_result] += 1
             except ValueError:
@@ -194,7 +203,8 @@ class DriveTestAppPyQt(QMainWindow):
             selected_mode = self.combo_type.currentText()
             mode_label = "RSSI" if "RSSI" in selected_mode else "SNR"
             from database.db_manager import insert_history
-            insert_history(mode_label, inserted_count, stats["Excellent"], stats["Good"], stats["Fair"], stats["Poor"], raw_text)
+            poor_combined = stats["Very Low Signal"] + stats["No Signal"]
+            insert_history(mode_label, inserted_count, stats["Excellent Signal"], stats["Very Good Signal"], stats["Low Signal"], poor_combined, raw_text)
 
     def show_history_dialog(self):
         dialog = HistoryDialog(self)
@@ -314,24 +324,51 @@ class DriveTestAppPyQt(QMainWindow):
         if self.table.rowCount() == 0: return
 
         selected_mode = self.combo_type.currentText()
+        
+        # PERBAIKAN: Logika dinamis untuk mengakomodasi perbedaan nama label RSSI vs SNR
         if "RSSI" in selected_mode:
             target_col_name = "Test Result"
             header_text = "Count of Average Field Strength (dBm)"
             main_title = "Laporan Distribusi - RSSI"
             default_filename = "Dashboard_RSSI_Result.png"
+            
+            # Label asli bawaan Excel
+            cat_keys = ["Excellent", "Good", "Fair", "Poor"]
+            colors_map = {
+                "Excellent": "#4472c4",
+                "Good": "#ed7d31",
+                "Fair": "#a5a5a5",
+                "Poor": "#ffc000"
+            }
         else:
             target_col_name = "SNR Result"
             header_text = "Count of SNR Result"
             main_title = "Laporan Distribusi - SNR"
             default_filename = "Dashboard_SNR_Result.png"
+            
+            # Label baru hasil hitungan program
+            cat_keys = ["Excellent Signal", "Very Good Signal", "Low Signal", "Very Low Signal", "No Signal"]
+            colors_map = {
+                "Excellent Signal": "#4472c4", 
+                "Very Good Signal": "#28a745", 
+                "Low Signal": "#ffc107",       
+                "Very Low Signal": "#fd7e14",  
+                "No Signal": "#dc3545"         
+            }
 
-        col_idx = self.columns.index(target_col_name)
-        counts = {"Excellent": 0, "Good": 0, "Fair": 0, "Poor": 0}
+        counts = {k: 0 for k in cat_keys}
         total_rows = 0
+        
+        try:
+            col_idx = self.columns.index(target_col_name)
+        except ValueError:
+            QMessageBox.warning(self, "Peringatan", f"Kolom '{target_col_name}' tidak ditemukan.")
+            return
         
         for row in range(self.table.rowCount()):
             item_no = self.table.item(row, 0)
             if item_no and item_no.text() == "AVG": continue
+            
             item = self.table.item(row, col_idx)
             if item:
                 res = item.text().strip()
@@ -340,12 +377,16 @@ class DriveTestAppPyQt(QMainWindow):
                     total_rows += 1
 
         labels, sizes, colors = [], [], []
-        colors_map = {"Excellent": "#4472c4", "Good": "#ed7d31", "Fair": "#a5a5a5", "Poor": "#ffc000"}
-        for cat, val in counts.items():
-            if val > 0:
+        
+        for cat in cat_keys:
+            if counts[cat] > 0:
                 labels.append(cat)
-                sizes.append(val)
+                sizes.append(counts[cat])
                 colors.append(colors_map[cat])
+
+        if total_rows == 0:
+            QMessageBox.warning(self, "Peringatan", f"Tidak ditemukan data valid pada kolom '{target_col_name}'.\nPastikan data sudah di-paste dengan benar.")
+            return
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), gridspec_kw={'width_ratios': [1, 1.3]})
         fig.patch.set_facecolor('white')
@@ -362,7 +403,11 @@ class DriveTestAppPyQt(QMainWindow):
         ax1.axis('equal') 
         
         ax2.axis('off')
-        table_data = [[cat, counts[cat]] for cat in ["Excellent", "Good", "Fair", "Poor"] if counts[cat] > 0]
+        
+        table_data = []
+        for cat in cat_keys:
+            if counts[cat] > 0:
+                table_data.append([cat, counts[cat]])
         table_data.append(["Grand Total", total_rows])
         
         table = ax2.table(cellText=table_data, colLabels=["Row Labels", header_text], loc='center', cellLoc='center')
